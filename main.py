@@ -11,6 +11,10 @@ cities_str = " - " + "\n - ".join(cities)
 last_update = []
 alert = []
 
+announcement_message = None
+light_keeper_role = None
+failed = False
+
 bot = commands.Bot(command_prefix=prefix)
 
 @bot.command(pass_context=True)
@@ -36,18 +40,6 @@ async def light(ctx):
     embed.add_field(name="Available cities:", value=cities_str)
     await ctx.send(embed=embed)
 
-@bot.command(pass_context=True)
-async def displayembed(ctx):
-    embed = discord.Embed(title="Your title here", description="Your desc here")
-    embed.add_field(name="Name", value="you can make as much as fields you like to")
-    await ctx.send(embed=embed)
-
-
-announcement_message = None
-light_keeper_role = None
-inline_var = True
-failed = False
-
 @tasks.loop(seconds=1.0)
 async def timerUpdate():
   global failed
@@ -55,7 +47,6 @@ async def timerUpdate():
   if failed:
     timerUpdate.cancel()
   if not announcement_message is None:
-    global inline_var
     global light_keeper_role
     embed = discord.Embed(title="Basin timers")
     now = datetime.datetime.today().replace(microsecond=0)
@@ -76,9 +67,9 @@ async def timerUpdate():
         str_time = '''```css\n[{}]```'''.format(str_time)
       else:
         str_time = '''```ini\n[{}]```'''.format(str_time)
-      embed.add_field(name=city, value=str_time, inline=inline_var)
-    embed.add_field(name="Light Keepers", value="{}".format(len(light_keeper_role.members)), inline=inline_var)
-    embed.add_field(name="Event status", value="{}".format("FAILED" if failed else "ONGOING"), inline=inline_var)
+      embed.add_field(name=city, value=str_time, inline=True)
+    embed.add_field(name="Light Keepers", value="{}".format(len(light_keeper_role.members)), inline=True)
+    embed.add_field(name="Event status", value="{}".format("FAILED" if failed else "ONGOING"), inline=True)
     try:
       await announcement_message.edit(embed=embed)
     except discord.errors.NotFound:
@@ -111,6 +102,5 @@ async def setTimer(ctx):
     time_left = datetime.timedelta(hours=2) - datetime.timedelta(hours=int(basin_time[0]), minutes=int(basin_time[1]))
     last_update[idx] = datetime.datetime.today().replace(microsecond=0) - time_left
     alert[idx] = True
-
 
 bot.run(os.environ['TOKEN'])
