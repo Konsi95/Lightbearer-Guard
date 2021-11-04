@@ -9,33 +9,33 @@ from keep_alive import keep_alive
 
 prefix = "$"
 end = datetime.datetime(2021, 11, 15, 9, 00)
-cities = ["Svargrond", "PoH", "Forbidden Lands", "Kazordoon", "Ramoa", "Edron", "Drefia", "Hellgate", "Ankrahmun", "Yalahar"]
-cities_str = " - " + "\n - ".join(cities)
+cities = ["svargrond", "plains of havoc", "forbidden lands", "kazordoon", "ramoa", "edron", "drefia", "hellgate", "ankrahmun", "yalahar"]
+cities_str = " - " + "\n - ".join(city.title() for city in cities)
 
-lightkeeper_role_name = "lightkeeper_role_name"
-status_channel_name = "status_channel_name"
-status_message_name = "status_message_name"
-alert_time_name = "alert_time_name"
+lightkeeper_role_name = "lightkeeper_role"
+time_guardian_role_name = "time_guardian_role"
+status_channel_name = "status_channel"
+status_message_name = "status_message"
+alert_time_name = "alert_time"
 failed = "failed"
 
 intents = discord.Intents.default()  # Allow the use of custom intents
 intents.members = True
 bot = commands.Bot(command_prefix=prefix, case_insensitive=True, intents=intents)
 
-async def resettimer(city, update_time, channel):
-  db[city] = (update_time.isoformat(), True)
-  async for message in channel.history(limit=10):
-    if "{}'s".format(city) in message.content:
-      await message.delete()
+def doesIntersect(lst1, lst2):
+    temp = set(lst2)
+    lst3 = [value for value in lst1 if value in temp]
+    return len(lst3)
 
 @bot.command()
 async def commands(ctx):
   embed = discord.Embed(title="Bot commands")
   embed.add_field(name="{}join".format(prefix), value="Join Lightkeepers to receive notifications about burning out locations", inline=False)
   embed.add_field(name="{}leave".format(prefix), value="Leave Lightkeepers", inline=False)
-  embed.add_field(name="{}light [city]".format(prefix), value="Reset basin timer", inline=False)
-  embed.add_field(name="{}setTimer [city] [time]".format(prefix), value="Set basin timer\nTime must be provided in HH:MM format", inline=False)
-  embed.add_field(name="Cities:", value=cities_str, inline=False)
+  embed.add_field(name="{}lit [city]".format(prefix), value="Reset basin timer\nNote: Only Time Guardians can use this command.\ne.g. {}lit Edron".format(prefix), inline=False)
+  embed.add_field(name="{}time [city] [time]".format(prefix), value="Set basin timer\nTime must be provided in HH:MM format\nNote: Only Time Guardians can use this command.\ne.g. {}time Edron 1:43".format(prefix), inline=False)
+  embed.add_field(name="Cities:", value=cities_str+"\nYou can also use any unequivocal abbreviation (e.g. PoH = Plains of Havoc, Svar = Svargrong, Kaz = Kazordoon, ed = Edron)", inline=False)
   await ctx.send(embed=embed)
 
 @bot.command()
@@ -54,35 +54,69 @@ async def leave(ctx):
     await member.remove_roles(role)
 
 @bot.command()
-async def light(ctx):
+async def lit(ctx):
   message = ctx.message
-  city = message.content[len(prefix) + len("light "):]
-  if city in cities:
-    await resettimer(city, datetime.datetime.today().replace(microsecond=0), bot.get_channel(db[status_channel_name]))
-    print("{}'s timer set to {}".format(city, "2:00"))
-    embed = discord.Embed(title="{}'s basin has been renewed!".format(city))
+  if not doesIntersect([role.id for role in message.author.roles], db[time_guardian_role_name]):
+    await ctx.send('You have no permission to use that command')
+    return
+  location = message.content[len(prefix) + len("lit "):].lower()
+  if location == "poh":
+    location = "plains of havoc"
+  channel = bot.get_channel(db[status_channel_name])
+  now = datetime.datetime.today().replace(microsecond=0)
+  applicable_cities = [city for city in cities if location in city]
+  if applicable_cities:
+    if len(applicable_cities) == 1:
+      location = applicable_cities[0]
+      db[location] = (now.isoformat(), True)
+      async for message in channel.history(limit=10):
+        if "{}".format(location.title()) in message.content:
+          await message.delete()
+      print("{} timer set to {}".format(location.title(), "2:00"))
+      embed = discord.Embed(title="{} basin has been renewed!".format(location.title()))
+      await ctx.send(embed=embed)
+    else:
+      print('Be more precise. Too many possible cities: {}'.format(', '.join(city.title() for city in applicable_cities)))
+      await ctx.send('Be more precise. Too many possible cities: {}'.format(', '.join(city.title() for city in applicable_cities)))
+  elif location == "all":
+    for city in cities:
+      db[city] = (now.isoformat(), True)
+    async for message in channel.history(limit=10):
+      if any(city in message.content for city in cities):
+        await message.delete()
+    print("All timers set to 2:00")
+    embed = discord.Embed(title="All basins have been renewed!")
     await ctx.send(embed=embed)
   else:
-    await ctx.send('Invalid city: {}'.format(city))
+    print('Invalid city: {}'.format(location))
+    await ctx.send('Invalid city: {}'.format(location))
 
 @bot.command()
-async def setTimer(ctx):
+async def time(ctx):
   message = ctx.message
-  data = message.content[len(prefix) + len("setTimer "):].split(" ")
-  city = " ".join(data[:-1])
-  if city in cities:
-    basin_time = data[-1].split(":")
-    try:
-      time_left = datetime.timedelta(hours=2) - datetime.timedelta(hours=int(basin_time[0]), minutes=int(basin_time[1]))
-      db[city] = ((datetime.datetime.today().replace(microsecond=0) - time_left).isoformat(), True)
-      print("{}'s timer set to {}".format(city, data[-1]))
-      await ctx.send("{}'s timer set to {}".format(city, data[-1]))
-    except:
-      print('Invalid time format "{}", should be HH:MM'.format(city, data[-1]))
-      await ctx.send('Invalid time format "{}", should be HH:MM'.format(city, data[-1]))
+  data = message.content[len(prefix) + len("time "):].split(" ")
+  location = " ".join(data[:-1]).lower()
+  if location == "poh":
+    location = "plains of havoc"
+  applicable_cities = [city for city in cities if location in city]
+  if applicable_cities:
+    if len(applicable_cities) == 1:
+      basin_time = data[-1].split(":")
+      try:
+        time_left = datetime.timedelta(hours=2) - datetime.timedelta(hours=int(basin_time[0]), minutes=int(basin_time[1]))
+        db[location] = ((datetime.datetime.today().replace(microsecond=0) - time_left).isoformat(), True)
+        print("{} timer set to {}".format(location, data[-1]))
+        embed = discord.Embed(title="{} timer set to {}".format(location, data[-1]))
+        await ctx.send(embed=embed)
+      except:
+        print('Invalid time format "{}", should be HH:MM'.format(location, data[-1]))
+        await ctx.send('Invalid time format "{}", should be HH:MM'.format(location, data[-1]))
+    else:
+      print('Be more precise. Too many possible cities: {}'.format(', '.join(city.title() for city in applicable_cities)))
+      await ctx.send('Be more precise. Too many possible cities: {}'.format(', '.join(city.title() for city in applicable_cities)))
   else:
-    print('City "{}" not found'.format(city))
-    await ctx.send('City "{}" not found'.format(city))
+    print('Invalid city: {}'.format(location))
+    await ctx.send('Invalid city: {}'.format(location))
 
 @tasks.loop(seconds=1.0)
 async def timerUpdate():
@@ -99,8 +133,7 @@ async def timerUpdate():
   status_channel = bot.get_channel(db[status_channel_name])
   light_keeper_role = get(status_channel.guild.roles, id=db[lightkeeper_role_name])
   embed = discord.Embed(title="Basin timers")
-  for i in range(0, len(cities)):
-    city = cities[i]
+  for city in cities:
     last_update, alert = db[city]
     time_diff = now - datetime.datetime.strptime(last_update, "%Y-%m-%dT%H:%M:%S")
     two_hours = datetime.timedelta(hours=2)
@@ -110,7 +143,7 @@ async def timerUpdate():
     if time_left < datetime.timedelta(minutes=db[alert_time_name]):
       if alert:
         db[city] = (last_update, False)
-        await status_channel.send(content="{} {}'s basin is burning out!".format(light_keeper_role.mention, city))
+        await status_channel.send(content="{} {} basin is burning out!".format(light_keeper_role.mention, city))
       if time_left < datetime.timedelta(0):
         db[failed] = True
         str_time = "0:00:00"
@@ -128,16 +161,19 @@ async def timerUpdate():
 @bot.command()
 @has_permissions(administrator=True)
 async def start(ctx):
-  if set([lightkeeper_role_name, status_channel_name, alert_time_name]).issubset(db.keys()):
+  if set([lightkeeper_role_name, time_guardian_role_name, status_channel_name, alert_time_name]).issubset(db.keys()):
     print("Start timer!")
     db[failed] = False
     now = datetime.datetime.today().replace(microsecond=0)
     for city in cities:
-      await resettimer(city, now, bot.get_channel(db[status_channel_name]))
+      db[city] = (now.isoformat(), True)
+    async for message in bot.get_channel(db[status_channel_name]).history(limit=10):
+      if any(city in message.content for city in cities):
+        await message.delete()
     timerUpdate.start()
   else:
-    print("You need to setup bot first!")
-    await ctx.send("You need to setup bot first!")
+    print("You need to setup bot first: lightkeeperRole, timeGuardianRole, statusChannel, alertTime")
+    await ctx.send("You need to setup bot first: lightkeeperRole, timeGuardianRole, statusChannel, alertTime")
 
 @bot.command()
 @has_permissions(administrator=True)
@@ -157,38 +193,72 @@ async def reset(ctx):
 
 @bot.command()
 @has_permissions(administrator=True)
-async def setRole(ctx):
-  roles = ctx.message.role_mentions
-  if len(roles) == 1:
-    print("Setting Light Keeper role: '{}'".format(roles[0].name))
-    db[lightkeeper_role_name] = roles[0].id
-  else:
-    print("Invalid role")
+async def softreset(ctx):
+  for key in db.keys():
+    if not key in [lightkeeper_role_name, time_guardian_role_name, status_channel_name, alert_time_name]:
+      del db[key]
 
 @bot.command()
 @has_permissions(administrator=True)
-async def setChannel(ctx):
+async def lightkeeperRole(ctx):
+  roles = ctx.message.role_mentions
+  if len(roles) == 1:
+    print("Setting Lightkeeper role: '{}'".format(roles[0].name))
+    await ctx.send("Setting Lightkeeper role: '{}'".format(roles[0].name))
+    db[lightkeeper_role_name] = roles[0].id
+  elif roles:
+    print("Please mention only one role")
+    await ctx.send("Please mention only one role")
+  else:
+    print("Please mention Lightkeeper role")
+    await ctx.send("Please mention Lightkeeper role")
+
+@bot.command()
+@has_permissions(administrator=True)
+async def timeGuardianRole(ctx):
+  roles = ctx.message.role_mentions
+  if roles:
+    print("Setting Time Guardian roles: {}".format(', '.join(role.name for role in roles)))
+    await ctx.send("Setting Time Guardian roles: {}".format(', '.join(role.name for role in roles)))
+    db[time_guardian_role_name] = [role.id for role in roles]
+  else:
+    print("Please mention Time Guardian role")
+    await ctx.send("Please mention Time Guardian role")
+
+@bot.command()
+@has_permissions(administrator=True)
+async def statusChannel(ctx):
   channels = ctx.message.channel_mentions
   if len(channels) == 1:
     db[status_channel_name] = channels[0].id
-    print("Status channel: {}(id: {})".format(channels[0].name, channels[0].id))
+    print("Setting status channel: {}(id: {})".format(channels[0].name, channels[0].id))
+    await ctx.send("Setting status channel: {}".format(channels[0].name))
+  elif channels:
+    print("Please mention only one channel")
+    await ctx.send("Please mention only one channel")
   else:
-    print("Invalid syntax")
+    print("Please mention status channel")
+    await ctx.send("Please mention status channel")
 
 @bot.command()
 @has_permissions(administrator=True)
-async def setAlertTime(ctx):
+async def alertTime(ctx):
   try:
-    alertTime = int(ctx.message.content[len(prefix) + len("setAlertTime "):])
+    alertTime = int(ctx.message.content[len(prefix) + len("alertTime "):])
     db[alert_time_name] = alertTime
     print("Set alert time: {}".format(alertTime))
+    await ctx.send("Set alert time: {}".format(alertTime))
   except:
-    print("Invalid format")
+    print("Invalid time format, should be: MM")
+    await ctx.send("Invalid time format, should be: MM")
 
-@setAlertTime.error
-@setChannel.error
-@setRole.error
+@alertTime.error
+@statusChannel.error
+@lightkeeperRole.error
+@timeGuardianRole.error
 @restart.error
+@softreset.error
+@reset.error
 @stop.error
 @start.error
 async def error(error, ctx):
