@@ -5,6 +5,7 @@ from discord.ext import commands, tasks
 from discord.ext.commands import has_permissions
 from discord.utils import get
 from replit import db
+from keep_alive import keep_alive
 
 prefix = "$"
 end = datetime.datetime(2021, 11, 15, 9, 00)
@@ -17,7 +18,9 @@ status_message_name = "status_message_name"
 alert_time_name = "alert_time_name"
 failed = "failed"
 
-bot = commands.Bot(command_prefix=prefix)
+intents = discord.Intents.default()  # Allow the use of custom intents
+intents.members = True
+bot = commands.Bot(command_prefix=prefix, case_insensitive=True, intents=intents)
 
 async def resettimer(city, update_time, channel):
   db[city] = (update_time.isoformat(), True)
@@ -115,7 +118,7 @@ async def timerUpdate():
     else:
       str_time = '''```ini\n[{}]```'''.format(str_time)
     embed.add_field(name=city, value=str_time, inline=True)
-  embed.add_field(name="Light Keepers", value="{}".format(len(light_keeper_role.members)), inline=True)
+  embed.add_field(name="Lightkeepers", value="{}".format(len(light_keeper_role.members)), inline=True)
   embed.add_field(name="Event status", value="{}".format(status), inline=True)
   try:
     await (await status_channel.fetch_message(db[status_message_name])).edit(embed=embed)
@@ -145,6 +148,12 @@ async def stop(ctx):
 @has_permissions(administrator=True)
 async def restart(ctx):
   timerUpdate.start()
+
+@bot.command()
+@has_permissions(administrator=True)
+async def reset(ctx):
+  for key in db.keys():
+    del db[key]
 
 @bot.command()
 @has_permissions(administrator=True)
@@ -185,4 +194,5 @@ async def setAlertTime(ctx):
 async def error(error, ctx):
   pass
 
+keep_alive()
 bot.run(os.environ['TOKEN'])
