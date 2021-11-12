@@ -31,11 +31,11 @@ def doesIntersect(lst1, lst2):
 @bot.command()
 async def commands(ctx):
   embed = discord.Embed(title="Bot commands")
-  embed.add_field(name="{}join".format(prefix), value="Join Lightkeepers to receive notifications about burning out locations", inline=False)
+  embed.add_field(name="{}join".format(prefix), value="Join Lightkeepers to receive notifications about burning out basins", inline=False)
   embed.add_field(name="{}leave".format(prefix), value="Leave Lightkeepers", inline=False)
   embed.add_field(name="{}lit [city]".format(prefix), value="Reset basin timer\nNote: Only Time Guardians can use this command.\ne.g. {}lit Edron".format(prefix), inline=False)
   embed.add_field(name="{}time [city] [time]".format(prefix), value="Set basin timer\nTime must be provided in HH:MM format\nNote: Only Time Guardians can use this command.\ne.g. {}time Edron 1:43".format(prefix), inline=False)
-  embed.add_field(name="Cities:", value=cities_str+"\nYou can also use any unequivocal abbreviation (e.g. PoH = Plains of Havoc, Svar = Svargrong, Kaz = Kazordoon, ed = Edron)", inline=False)
+  embed.add_field(name="Cities:", value=cities_str+"\nYou can also use any unequivocal abbreviation (e.g. PoH = Plains of Havoc, Svar = Svargrond, Kaz = Kazordoon, ed = Edron)", inline=False)
   await ctx.send(embed=embed)
 
 @bot.command()
@@ -45,6 +45,10 @@ async def join(ctx):
   if not role in member.roles:
     await member.add_roles(role)
     await ctx.send("{} is our new Lightkeeper!".format(member.mention))
+  else:
+    await ctx.send("{}, you are already among the Lightkeepers".format(member.mention))
+  if not timerUpdate.is_running():
+    await prepareForEvent(ctx)
 
 @bot.command()
 async def leave(ctx):
@@ -52,9 +56,16 @@ async def leave(ctx):
   role = get(member.guild.roles, id=db[lightkeeper_role_name])
   if role in member.roles:
     await member.remove_roles(role)
+    await ctx.send("{} is no longer a Lightkeeper".format(member.mention))
+  if not timerUpdate.is_running():
+    await prepareForEvent(ctx)
 
 @bot.command()
 async def lit(ctx):
+  if not timerUpdate.is_running():
+    print('{}, the event has not started yet.'.format(ctx.message.author.name))
+    await ctx.send('{}, the event has not started yet.'.format(ctx.message.author.name))
+    return
   message = ctx.message
   if not doesIntersect([role.id for role in message.author.roles], db[time_guardian_role_name]):
     await ctx.send('You have no permission to use that command')
@@ -93,6 +104,10 @@ async def lit(ctx):
 
 @bot.command()
 async def time(ctx):
+  if not timerUpdate.is_running():
+    print('{}, the event has not started yet.'.format(ctx.message.author.name))
+    await ctx.send('{}, the event has not started yet.'.format(ctx.message.author.name))
+    return
   message = ctx.message
   data = message.content[len(prefix) + len("time "):].split(" ")
   location = " ".join(data[:-1]).lower()
@@ -101,16 +116,21 @@ async def time(ctx):
   applicable_cities = [city for city in cities if location in city]
   if applicable_cities:
     if len(applicable_cities) == 1:
+      location = applicable_cities[0]
       basin_time = data[-1].split(":")
       try:
+        channel = bot.get_channel(db[status_channel_name])
         time_left = datetime.timedelta(hours=2) - datetime.timedelta(hours=int(basin_time[0]), minutes=int(basin_time[1]))
         db[location] = ((datetime.datetime.today().replace(microsecond=0) - time_left).isoformat(), True)
-        print("{} timer set to {}".format(location, data[-1]))
-        embed = discord.Embed(title="{} timer set to {}".format(location, data[-1]))
+        print("{} timer set to {}".format(location.title(), data[-1]))
+        embed = discord.Embed(title="{} timer set to {}".format(location.title(), data[-1]))
         await ctx.send(embed=embed)
+        async for message in channel.history(limit=10):
+          if "{}".format(location.title()) in message.content:
+            await message.delete()
       except:
-        print('Invalid time format "{}", should be HH:MM'.format(location, data[-1]))
-        await ctx.send('Invalid time format "{}", should be HH:MM'.format(location, data[-1]))
+        print('Invalid time format "{}", should be HH:MM'.format(location.title(), data[-1]))
+        await ctx.send('Invalid time format "{}", should be HH:MM'.format(location.title(), data[-1]))
     else:
       print('Be more precise. Too many possible cities: {}'.format(', '.join(city.title() for city in applicable_cities)))
       await ctx.send('Be more precise. Too many possible cities: {}'.format(', '.join(city.title() for city in applicable_cities)))
@@ -143,14 +163,14 @@ async def timerUpdate():
     if time_left < datetime.timedelta(minutes=db[alert_time_name]):
       if alert:
         db[city] = (last_update, False)
-        await status_channel.send(content="{} {} basin is burning out!".format(light_keeper_role.mention, city))
+        await status_channel.send(content="{} {} basin is burning out!".format(light_keeper_role.mention, city.title()))
       if time_left < datetime.timedelta(0):
         db[failed] = True
         str_time = "0:00:00"
-      str_time = '''```css\n[{}]```'''.format(str_time)
+      str_time = '```css\n[{}]```'.format(str_time)
     else:
-      str_time = '''```ini\n[{}]```'''.format(str_time)
-    embed.add_field(name=city, value=str_time, inline=True)
+      str_time = '```ini\n[{}]```'.format(str_time)
+    embed.add_field(name=city.title(), value=str_time, inline=True)
   embed.add_field(name="Lightkeepers", value="{}".format(len(light_keeper_role.members)), inline=True)
   embed.add_field(name="Event status", value="{}".format(status), inline=True)
   try:
@@ -195,8 +215,23 @@ async def reset(ctx):
 @has_permissions(administrator=True)
 async def softreset(ctx):
   for key in db.keys():
-    if not key in [lightkeeper_role_name, time_guardian_role_name, status_channel_name, alert_time_name]:
+    if not key in [lightkeeper_role_name, time_guardian_role_name, status_channel_name, alert_time_name, status_message_name]:
       del db[key]
+
+@bot.command()
+@has_permissions(administrator=True)
+async def prepareForEvent(ctx):
+  status_channel = bot.get_channel(db[status_channel_name])
+  light_keeper_role = get(status_channel.guild.roles, id=db[lightkeeper_role_name])
+  embed = discord.Embed(title="Basin timers")
+  for city in cities:
+    embed.add_field(name=city.title(), value='```ini\n[-:--:--]```', inline=True)
+  embed.add_field(name="Lightkeepers", value="{}".format(len(light_keeper_role.members)), inline=True)
+  embed.add_field(name="Event status", value="PENDING", inline=True)
+  try:
+    await (await status_channel.fetch_message(db[status_message_name])).edit(embed=embed)
+  except (discord.errors.NotFound, KeyError):
+    db[status_message_name] = (await status_channel.send(embed=embed)).id
 
 @bot.command()
 @has_permissions(administrator=True)
@@ -256,13 +291,14 @@ async def alertTime(ctx):
 @statusChannel.error
 @lightkeeperRole.error
 @timeGuardianRole.error
+@prepareForEvent.error
 @restart.error
 @softreset.error
 @reset.error
 @stop.error
 @start.error
 async def error(error, ctx):
-  pass
+  await ctx.send('You have no permission to use that command')
 
 keep_alive()
 bot.run(os.environ['TOKEN'])
