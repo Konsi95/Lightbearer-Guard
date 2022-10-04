@@ -1,12 +1,6 @@
 # Info
 [prefix] - The prefix you choose in config, default is $
 
-# Setup
-Edit main.py
-
-Edit line 10 and 16-18 to the prefix you want and respective role names and channel name.
-
-
 # Available Commands
 [prefix]join - Join Lightkeepers to receive notifications about burning out basins
 
