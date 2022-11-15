@@ -1,13 +1,25 @@
-# Info
-[prefix] - The prefix you choose in config, default is $
+# Available Slash Commands
+/lit city:[city] - Reset basin timer (e.g. /lit city:Edron, /lit city:All)
 
-# Available Commands
-[prefix]join - Join Lightkeepers to receive notifications about burning out basins
+/time city:[city] timer:[time] - Set basin timer. Time must be provided in HH:MM format. (e.g. /time city:Edron timer:1:43)
 
-[prefix]leave - Leave Lightkeepers
 
-[prefix]lit [city] - Reset basin timer (Note: Only Time Guardians can use this command. e.g. [prefix]lit Edron)
+# Admin Commands
+/alertTime [time] - set alert time. When any timer drops under that value, notification will be sent on the status channel. 
+When timer drops under [time]/2, bot will send PM to all Lightkeepers
 
-[prefix]time [city] [time] - Set basin timer. Time must be provided in HH:MM format. Note: Only Time Guardians can use this command. e.g. [prefix]time Edron 1:43
+/statusChannel [channel_mention] - set status channel
 
-[prefix]cities [city] - Info about specified cities. You can also use any unequivocal abbreviation (e.g. PoH = Plains of Havoc, Svar = Svargrond, Kaz = Kazordoon, ed = Edron)
+/lightkeeperRole [role_mention] - set lightkeeper role
+
+/prepareForEvent - prepare status message on the status channel
+
+/restart - restart event if any timer hits 00:00:00
+
+/soft_reset - remove timers only
+
+/reset - remove all settings
+
+/stop - stop event
+
+/start - start event
